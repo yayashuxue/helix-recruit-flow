@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,7 +62,20 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				// Added custom purple for Helix
+				purple: {
+					'50': '#f8f6fe',
+					'100': '#f1eefe',
+					'200': '#e4ddfd',
+					'300': '#cdc0fa',
+					'400': '#b19bf6',
+					'500': '#9b87f5',
+					'600': '#7e69ab',
+					'700': '#6a4e97',
+					'800': '#513976',
+					'900': '#382756',
+				},
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
