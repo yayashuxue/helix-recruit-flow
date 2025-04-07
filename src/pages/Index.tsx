@@ -1,11 +1,13 @@
 
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import ChatInterface from "@/components/ChatInterface";
 import Workspace from "@/components/Workspace";
+import Header from "@/components/Header";
 import { SequenceStep } from "@/types/sequence";
 import { Message } from "@/types/chat";
-import { toast } from "sonner";
-import Header from "@/components/Header";
+import { generateCompletion, generateSequence } from "@/services/openai";
+import { chatApi, sequenceApi } from "@/api/client";
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -19,6 +21,10 @@ const Index = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // For demo purposes, we'll use a fixed userId
+  // In a real application, this would come from authentication
+  const userId = "demo-user-123";
 
   const addMessage = (newMessage: Omit<Message, "id">) => {
     const id = crypto.randomUUID();
@@ -30,108 +36,152 @@ const Index = () => {
     addMessage({ role: "user", content });
     setIsLoading(true);
 
-    // Here we'd normally call the backend API
-    // For demo purposes, we'll simulate a response
-    setTimeout(() => {
-      handleAgentResponse(content);
+    try {
+      // First, try to use the backend API
+      const response = await chatApi.sendMessage({
+        message: content,
+        userId,
+        sequenceId: sequence.length > 0 ? "current-sequence" : undefined,
+      });
+
+      if (response.success && response.data) {
+        addMessage({ role: "assistant", content: response.data.content });
+      } else {
+        // Fallback to direct OpenAI if backend fails
+        console.log("Backend API failed, falling back to direct OpenAI");
+        const aiResponse = await generateCompletion([...messages, { id: "temp", role: "user", content }]);
+        addMessage({ role: "assistant", content: aiResponse });
+        
+        // Process sequence generation based on content
+        if (
+          content.toLowerCase().includes("sequence") || 
+          content.toLowerCase().includes("email") ||
+          content.toLowerCase().includes("recruit") ||
+          content.toLowerCase().includes("developer") ||
+          content.toLowerCase().includes("engineer") ||
+          content.toLowerCase().includes("hire")
+        ) {
+          handleSequenceGeneration(content);
+        }
+      }
+    } catch (error) {
+      console.error("Error processing message:", error);
+      addMessage({ 
+        role: "assistant", 
+        content: "I'm having trouble connecting to the backend. Please try again later." 
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleAgentResponse = (userMessage: string) => {
-    // Simple logic to determine response based on user message
-    if (userMessage.toLowerCase().includes("sequence") || userMessage.toLowerCase().includes("email")) {
-      addMessage({
-        role: "assistant",
-        content: "I'll help you create a recruiting outreach sequence. What position are you hiring for?",
-      });
-    } else if (userMessage.toLowerCase().includes("software") || userMessage.toLowerCase().includes("engineer") || userMessage.toLowerCase().includes("developer")) {
+  const handleSequenceGeneration = async (userMessage: string) => {
+    if (
+      userMessage.toLowerCase().includes("software") || 
+      userMessage.toLowerCase().includes("engineer") || 
+      userMessage.toLowerCase().includes("developer")
+    ) {
       setIsGenerating(true);
       addMessage({
         role: "assistant",
         content: "Generating a recruiting sequence for software engineers...",
       });
       
-      // Simulate sequence generation
-      setTimeout(() => {
-        generateSampleSequence();
-        setIsGenerating(false);
+      try {
+        // Try to use backend API first
+        const response = await sequenceApi.generate({
+          title: "Software Engineer Outreach",
+          position: "Software Engineer",
+          userId,
+          additionalInfo: userMessage,
+        });
+
+        if (response.success && response.data) {
+          setSequence(response.data.steps);
+        } else {
+          // Fallback to direct OpenAI
+          console.log("Backend API failed, falling back to direct OpenAI");
+          const generatedSequence = await generateSequence("Software Engineer", userMessage);
+          setSequence(generatedSequence);
+        }
+
         addMessage({
           role: "assistant",
           content: "I've created a draft recruiting sequence for software engineers. You can edit any step directly in the workspace, or let me know what changes you'd like to make.",
         });
-      }, 2000);
-    } else if (userMessage.toLowerCase().includes("change") || userMessage.toLowerCase().includes("update") || userMessage.toLowerCase().includes("edit")) {
-      // Handle edit request
-      if (sequence.length > 0) {
+      } catch (error) {
+        console.error("Error generating sequence:", error);
         addMessage({
           role: "assistant",
-          content: "I've updated the sequence based on your feedback. Feel free to make any additional edits directly in the workspace.",
+          content: "I had trouble generating the sequence. Please try again.",
         });
-        // Simulate an edit to the first step
-        if (sequence.length > 0) {
-          updateSequenceStep(0, {
-            ...sequence[0],
-            content: sequence[0].content + " I noticed your impressive background and thought you might be interested in an exciting opportunity at our company.",
-          });
-        }
-      } else {
-        addMessage({
-          role: "assistant",
-          content: "It looks like we don't have a sequence yet. Let's create one first! What position are you hiring for?",
-        });
+      } finally {
+        setIsGenerating(false);
       }
-    } else {
-      addMessage({
-        role: "assistant",
-        content: "I'm here to help you create recruiting outreach sequences. Would you like me to help you create one? Just let me know what position you're hiring for.",
-      });
     }
   };
 
-  const generateSampleSequence = () => {
-    const newSequence: SequenceStep[] = [
-      {
-        id: "1",
-        title: "Initial Outreach",
-        content: "Hi {{first_name}}, I hope this message finds you well. I'm a recruiter at [Company Name] and I came across your profile.",
-      },
-      {
-        id: "2",
-        title: "Position Details",
-        content: "We're looking for a talented Software Engineer to join our growing team. This role offers competitive compensation and exciting projects working with cutting-edge technologies.",
-      },
-      {
-        id: "3",
-        title: "Follow-up",
-        content: "I'd love to discuss this opportunity further and learn more about your career aspirations. Would you be available for a quick call this week?",
-      },
-    ];
-    setSequence(newSequence);
-  };
-
-  const updateSequenceStep = (index: number, updatedStep: SequenceStep) => {
+  const updateSequenceStep = async (index: number, updatedStep: SequenceStep) => {
     setSequence((prev) => {
       const newSequence = [...prev];
       newSequence[index] = updatedStep;
       return newSequence;
     });
-    toast.success("Sequence updated successfully");
+
+    try {
+      // Sync with backend
+      await sequenceApi.update({
+        sequenceId: "current-sequence",
+        steps: [...sequence],
+        userId,
+      });
+      toast.success("Sequence updated successfully");
+    } catch (error) {
+      console.error("Error updating sequence:", error);
+      toast.error("Failed to sync sequence with server");
+    }
   };
 
-  const addSequenceStep = () => {
+  const addSequenceStep = async () => {
     const newStep: SequenceStep = {
       id: crypto.randomUUID(),
       title: `Step ${sequence.length + 1}`,
       content: "New message content goes here.",
     };
-    setSequence((prev) => [...prev, newStep]);
-    toast.success("New step added to sequence");
+    
+    const updatedSequence = [...sequence, newStep];
+    setSequence(updatedSequence);
+    
+    try {
+      // Sync with backend
+      await sequenceApi.update({
+        sequenceId: "current-sequence",
+        steps: updatedSequence,
+        userId,
+      });
+      toast.success("New step added to sequence");
+    } catch (error) {
+      console.error("Error adding sequence step:", error);
+      toast.error("Failed to sync new step with server");
+    }
   };
 
-  const removeSequenceStep = (id: string) => {
-    setSequence((prev) => prev.filter((step) => step.id !== id));
-    toast.success("Step removed from sequence");
+  const removeSequenceStep = async (id: string) => {
+    const updatedSequence = sequence.filter((step) => step.id !== id);
+    setSequence(updatedSequence);
+    
+    try {
+      // Sync with backend
+      await sequenceApi.update({
+        sequenceId: "current-sequence",
+        steps: updatedSequence,
+        userId,
+      });
+      toast.success("Step removed from sequence");
+    } catch (error) {
+      console.error("Error removing sequence step:", error);
+      toast.error("Failed to sync removal with server");
+    }
   };
 
   // Scroll to bottom of messages
