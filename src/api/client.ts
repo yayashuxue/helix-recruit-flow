@@ -1,4 +1,3 @@
-
 import { ApiResponse, ChatRequest, SequenceRequest, SequenceUpdateRequest, Sequence } from '@/types/api';
 import { Message } from '@/types/chat';
 import { API_CONFIG } from '@/config/appConfig';
@@ -40,8 +39,22 @@ async function fetchAPI<T>(
 
 // API endpoints for chat
 export const chatApi = {
-  sendMessage: (request: ChatRequest): Promise<ApiResponse<Message>> => {
-    return fetchAPI<Message>('/chat/message', 'POST', request);
+  sendMessage: async (data: ChatRequest): Promise<ApiResponse<Message>> => {
+    console.log("Starting API request to:", `${API_CONFIG.BASE_URL}/chat/message`);
+    try {
+      const result = await fetchAPI<Message>('/chat/message', 'POST', data);
+      console.log("API response received:", result);
+      return result;
+    } catch (error) {
+      console.error("API request failed with error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error'
+      };
+    }
+  },
+  getChatHistory: (userId: string): Promise<ApiResponse<Message[]>> => {
+    return fetchAPI<Message[]>(`/chat/history/${userId}`, 'GET');
   },
 };
 

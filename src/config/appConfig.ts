@@ -1,4 +1,3 @@
-
 /**
  * Application configuration file
  * 
@@ -9,7 +8,7 @@
 // API Configuration
 export const API_CONFIG = {
   // Base URL for the Flask backend API
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api',
   
   // Timeout for API requests in milliseconds
   TIMEOUT: 30000,
@@ -47,7 +46,7 @@ export const ANTHROPIC_CONFIG = {
   API_KEY: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
   
   // Default model to use for chat completions
-  DEFAULT_MODEL: 'claude-3-opus-20240229',
+  DEFAULT_MODEL: 'claude-3-5-sonnet-20241022',
   
   // API endpoint for chat completions
   API_URL: 'https://api.anthropic.com/v1/messages',
@@ -77,7 +76,7 @@ export const USER_CONFIG = {
 // Feature flags
 export const FEATURES = {
   USE_BACKEND_API: true, // Set to false to use direct OpenAI calls (development only)
-  USE_ANTHROPIC: false, // Set to true to use Anthropic instead of OpenAI
+  USE_ANTHROPIC: true, // Set to true to use Anthropic instead of OpenAI
   ENABLE_ANALYTICS: false,
   DEBUG_MODE: import.meta.env.DEV,
 };

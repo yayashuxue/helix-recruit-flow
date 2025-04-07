@@ -1,5 +1,5 @@
-
-import { SequenceStep } from './sequence';
+import { Message, ToolCall } from "./chat";
+import { SequenceStep } from "./sequence";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -11,6 +11,13 @@ export interface ChatRequest {
   message: string;
   userId: string;
   sequenceId?: string;
+}
+
+export interface ChatResponse {
+  id: string;
+  role: string;
+  content: string;
+  tool_calls?: ToolCall[];
 }
 
 export interface SequenceRequest {
@@ -38,6 +45,7 @@ export interface Sequence {
   title: string;
   position: string;
   userId: string;
+  additionalInfo?: string;
   steps: SequenceStep[];
   createdAt: string;
   updatedAt: string;
