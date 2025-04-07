@@ -1,4 +1,6 @@
 
+import { SequenceStep } from './sequence';
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
