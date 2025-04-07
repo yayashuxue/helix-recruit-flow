@@ -1,73 +1,55 @@
-# Welcome to your Lovable project
 
-## Project info
+# Helix AI Recruiting Assistant
 
-**URL**: https://lovable.dev/projects/6a9bdedb-e9c5-498f-b972-7079d48ca982
+Helix is an AI-powered recruiting assistant that helps you create effective recruiting sequences for various positions.
 
-## How can I edit this code?
+## Environment Setup
 
-There are several ways of editing your application.
+To run this application, you'll need to set up the following environment variables:
 
-**Use Lovable**
+### Frontend Environment Variables
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/6a9bdedb-e9c5-498f-b972-7079d48ca982) and start prompting.
+Create a `.env` or `.env.local` file in the root directory with the following variables:
 
-Changes made via Lovable will be committed automatically to this repo.
+```
+# API Configuration
+VITE_API_URL=http://localhost:5000/api
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# OpenAI Configuration
+VITE_OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-**Edit a file directly in GitHub**
+### Required API Keys
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+1. **OpenAI API Key**: 
+   - Sign up at [OpenAI](https://platform.openai.com/signup)
+   - Create an API key in your OpenAI dashboard
+   - Add it to your `.env` file as `VITE_OPENAI_API_KEY`
 
-**Use GitHub Codespaces**
+## Backend Setup (Flask)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+The frontend is designed to communicate with a Flask backend. You'll need to set up the Flask backend separately with the following endpoints:
 
-## What technologies are used for this project?
+- `/api/chat/message` (POST): Process chat messages
+- `/api/sequences/generate` (POST): Generate new sequences
+- `/api/sequences/update` (PUT): Update existing sequences
+- `/api/sequences/:id` (GET): Get a specific sequence
+- `/api/sequences/user/:userId` (GET): List sequences for a user
 
-This project is built with:
+## Development Mode
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+For development, you can use the direct OpenAI integration by setting `USE_BACKEND_API: false` in the `src/config/appConfig.ts` file. This allows you to develop and test the frontend without having the backend set up.
 
-## How can I deploy this project?
+## Getting Started
 
-Simply open [Lovable](https://lovable.dev/projects/6a9bdedb-e9c5-498f-b972-7079d48ca982) and click on Share -> Publish.
+1. Install dependencies:
+   ```
+   npm install
+   ```
 
-## Can I connect a custom domain to my Lovable project?
+2. Start the development server:
+   ```
+   npm run dev
+   ```
 
-Yes it is!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+3. Open [http://localhost:8080](http://localhost:8080) to view the app in your browser.

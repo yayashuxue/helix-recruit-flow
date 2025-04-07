@@ -1,17 +1,13 @@
 
 import { Message } from '@/types/chat';
 import { SequenceStep } from '@/types/sequence';
-
-// Configure OpenAI API key - in production, this would be stored securely
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_MODEL = 'gpt-4o-mini';
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+import { OPENAI_CONFIG } from '@/config/appConfig';
 
 // For direct client-side calls during development
 // In production, these calls should go through the backend
 export async function generateCompletion(messages: Message[]): Promise<string> {
   try {
-    if (!OPENAI_API_KEY) {
+    if (!OPENAI_CONFIG.API_KEY) {
       console.error('OpenAI API key not found');
       return 'API key not configured. Please set VITE_OPENAI_API_KEY in your environment.';
     }
@@ -21,23 +17,23 @@ export async function generateCompletion(messages: Message[]): Promise<string> {
       content: msg.content
     }));
 
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(OPENAI_CONFIG.API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Authorization': `Bearer ${OPENAI_CONFIG.API_KEY}`
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: OPENAI_CONFIG.DEFAULT_MODEL,
         messages: [
           {
             role: 'system',
-            content: 'You are Helix, an AI recruiting assistant. Help create effective recruiting outreach sequences.'
+            content: OPENAI_CONFIG.SYSTEM_MESSAGE
           },
           ...formattedMessages
         ],
-        temperature: 0.7,
-        max_tokens: 1000
+        temperature: OPENAI_CONFIG.TEMPERATURE,
+        max_tokens: OPENAI_CONFIG.MAX_TOKENS
       })
     });
 
@@ -58,19 +54,19 @@ export async function generateCompletion(messages: Message[]): Promise<string> {
 // Function to generate a recruiting sequence
 export async function generateSequence(position: string, details: string): Promise<SequenceStep[]> {
   try {
-    if (!OPENAI_API_KEY) {
+    if (!OPENAI_CONFIG.API_KEY) {
       console.error('OpenAI API key not found');
       return [];
     }
 
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(OPENAI_CONFIG.API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Authorization': `Bearer ${OPENAI_CONFIG.API_KEY}`
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: OPENAI_CONFIG.DEFAULT_MODEL,
         messages: [
           {
             role: 'system',
@@ -81,7 +77,7 @@ export async function generateSequence(position: string, details: string): Promi
             content: `Create a recruiting sequence for a ${position} position. Additional details: ${details}`
           }
         ],
-        temperature: 0.7,
+        temperature: OPENAI_CONFIG.TEMPERATURE,
         max_tokens: 1500,
         response_format: { type: "json_object" }
       })
