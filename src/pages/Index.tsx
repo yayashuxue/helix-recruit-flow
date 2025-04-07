@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import ChatInterface from "@/components/ChatInterface";
@@ -6,8 +5,9 @@ import Workspace from "@/components/Workspace";
 import Header from "@/components/Header";
 import { SequenceStep } from "@/types/sequence";
 import { Message } from "@/types/chat";
-import { generateCompletion, generateSequence } from "@/services/openai";
+import { generateCompletion, generateSequence } from "@/services/aiService";
 import { chatApi, sequenceApi } from "@/api/client";
+import { FEATURES } from "@/config/appConfig";
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -22,8 +22,6 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // For demo purposes, we'll use a fixed userId
-  // In a real application, this would come from authentication
   const userId = "demo-user-123";
 
   const addMessage = (newMessage: Omit<Message, "id">) => {
@@ -32,27 +30,39 @@ const Index = () => {
   };
 
   const handleUserMessage = async (content: string) => {
-    // Add user message to chat
     addMessage({ role: "user", content });
     setIsLoading(true);
 
     try {
-      // First, try to use the backend API
-      const response = await chatApi.sendMessage({
-        message: content,
-        userId,
-        sequenceId: sequence.length > 0 ? "current-sequence" : undefined,
-      });
+      if (FEATURES.USE_BACKEND_API) {
+        const response = await chatApi.sendMessage({
+          message: content,
+          userId,
+          sequenceId: sequence.length > 0 ? "current-sequence" : undefined,
+        });
 
-      if (response.success && response.data) {
-        addMessage({ role: "assistant", content: response.data.content });
+        if (response.success && response.data) {
+          addMessage({ role: "assistant", content: response.data.content });
+        } else {
+          console.log("Backend API failed, falling back to direct AI service");
+          const aiResponse = await generateCompletion([...messages, { id: "temp", role: "user", content }]);
+          addMessage({ role: "assistant", content: aiResponse });
+          
+          if (
+            content.toLowerCase().includes("sequence") || 
+            content.toLowerCase().includes("email") ||
+            content.toLowerCase().includes("recruit") ||
+            content.toLowerCase().includes("developer") ||
+            content.toLowerCase().includes("engineer") ||
+            content.toLowerCase().includes("hire")
+          ) {
+            handleSequenceGeneration(content);
+          }
+        }
       } else {
-        // Fallback to direct OpenAI if backend fails
-        console.log("Backend API failed, falling back to direct OpenAI");
         const aiResponse = await generateCompletion([...messages, { id: "temp", role: "user", content }]);
         addMessage({ role: "assistant", content: aiResponse });
         
-        // Process sequence generation based on content
         if (
           content.toLowerCase().includes("sequence") || 
           content.toLowerCase().includes("email") ||
@@ -68,7 +78,7 @@ const Index = () => {
       console.error("Error processing message:", error);
       addMessage({ 
         role: "assistant", 
-        content: "I'm having trouble connecting to the backend. Please try again later." 
+        content: "I'm having trouble connecting to the AI service. Please try again later." 
       });
     } finally {
       setIsLoading(false);
@@ -88,7 +98,6 @@ const Index = () => {
       });
       
       try {
-        // Try to use backend API first
         const response = await sequenceApi.generate({
           title: "Software Engineer Outreach",
           position: "Software Engineer",
@@ -99,7 +108,6 @@ const Index = () => {
         if (response.success && response.data) {
           setSequence(response.data.steps);
         } else {
-          // Fallback to direct OpenAI
           console.log("Backend API failed, falling back to direct OpenAI");
           const generatedSequence = await generateSequence("Software Engineer", userMessage);
           setSequence(generatedSequence);
@@ -129,7 +137,6 @@ const Index = () => {
     });
 
     try {
-      // Sync with backend
       await sequenceApi.update({
         sequenceId: "current-sequence",
         steps: [...sequence],
@@ -153,7 +160,6 @@ const Index = () => {
     setSequence(updatedSequence);
     
     try {
-      // Sync with backend
       await sequenceApi.update({
         sequenceId: "current-sequence",
         steps: updatedSequence,
@@ -171,7 +177,6 @@ const Index = () => {
     setSequence(updatedSequence);
     
     try {
-      // Sync with backend
       await sequenceApi.update({
         sequenceId: "current-sequence",
         steps: updatedSequence,
@@ -184,7 +189,6 @@ const Index = () => {
     }
   };
 
-  // Scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
