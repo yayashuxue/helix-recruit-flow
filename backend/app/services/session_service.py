@@ -39,6 +39,12 @@ class SessionService:
             session.last_action = updates['last_action']
             session.last_action_time = datetime.utcnow()
             
+            # 如果动作是生成序列，设置一个标志
+            if updates['last_action'] == 'generate_sequence':
+                current_data = session.get_context_data()
+                current_data['sequence_generated'] = True
+                session.set_context_data(current_data)
+        
         # Update context data if provided
         if 'context_data' in updates:
             # Merge with existing context data

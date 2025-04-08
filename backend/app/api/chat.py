@@ -5,6 +5,7 @@ from flask_socketio import emit
 from ..database.db import db
 from ..models import User, ChatMessage
 from ..services.ai_service import AIService
+from ..services.session_service import SessionService
 from .. import socketio
 
 bp = Blueprint('chat', __name__)
@@ -61,18 +62,42 @@ async def send_message():
         # Get user info for context
         user_info = {
             'user_id': user_id,
-            'company_name': user.company if hasattr(user, 'company') and user.company else None,
-            'company_description': user.company_description if hasattr(user, 'company_description') and user.company_description else None
+            'company_name': user.company if user else None
         }
         
         # Log the user's message for debugging
         current_app.logger.info(f"Processing message from user {user_id}: {message_content[:50]}...")
         
+        # Get session context
+        session_service = SessionService.get_instance()
+        session_context = session_service.get_session_context(user_id)
+        
         # Get AIService instance and generate response
         ai_service = AIService.get_instance()
         print("Generating chat response... 🌟 user_info:", user_info)
-        response = await ai_service.generate_chat_response(history, user_info)
+        print("Generating chat response... 🌟 history:", history)
+        response = await ai_service.generate_chat_response(
+            history, 
+            user_info=user_info,
+            session_context=session_context
+        )
         
+        # 如果有工具调用，将工具调用和结果添加到历史中
+        if response.get('tool_calls') and len(response['tool_calls']) > 0:
+            # 添加工具调用记录
+            history.append({
+                'role': 'assistant',
+                'content': f"I've executed the tool to generate a sequence for {response['tool_calls'][0]['arguments'].get('position')}. The sequence has been created successfully and is now available for review."
+            })
+            
+            # 将工具调用记录保存到数据库中的聊天历史
+            new_message = ChatMessage(
+                user_id=user_id,
+                role='assistant',
+                content=f"I've executed the tool to generate a sequence for {response['tool_calls'][0]['arguments'].get('position')}. The sequence has been created successfully and is now available for review."
+            )
+            db.session.add(new_message)
+            db.session.commit()
         
         # The response now contains both processed content and any tool calls
         response_content = response.get('content', '')

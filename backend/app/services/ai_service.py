@@ -94,7 +94,28 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
         
     def _create_message_history(self, messages):
         """Convert messages to the format expected by Anthropic."""
-        return [{"role": msg["role"], "content": msg["content"]} for msg in messages]
+        converted_messages = []
+        
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            
+            # Skip empty messages
+            if not content:
+                continue
+            
+            # Handle system messages - convert to assistant messages
+            if role == "system":
+                # Append to previous assistant message if possible, otherwise create new one
+                if converted_messages and converted_messages[-1]["role"] == "assistant":
+                    converted_messages[-1]["content"] += f"\n\nSystem update: {content}"
+                else:
+                    converted_messages.append({"role": "assistant", "content": f"System update: {content}"})
+            # Only include user and assistant messages
+            elif role in ["user", "assistant"]:
+                converted_messages.append({"role": role, "content": content})
+        
+        return converted_messages
     
     def _ensure_client(self):
         """Ensure we have a valid client, initializing if needed."""
@@ -109,16 +130,10 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
             except RuntimeError:
                 raise ValueError("No Anthropic API key available and not in Flask application context")
     
-    async def generate_chat_response(self, messages: List[Dict[str, str]], user_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Generate a response from Claude based on the conversation history.
-        
-        Args:
-            messages: List of message objects with role and content
-            user_info: Optional dictionary with user context information
-            
-        Returns:
-            Dictionary with response content and any tool calls
-        """
+    async def generate_chat_response(self, messages: List[Dict[str, str]], 
+                                   user_info: Optional[Dict[str, Any]] = None,
+                                   session_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Generate a response from Claude based on the conversation history."""
         try:
             self._ensure_client()
             
@@ -132,6 +147,23 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
             
             # Add user context to the system message if provided
             system_message = self.system_message
+            
+            # Add session context if available
+            if session_context and session_context.get('active_sequence'):
+                seq = session_context['active_sequence']
+                system_message += f"""
+
+IMPORTANT CONTEXT:
+- Active sequence: {seq['position']}
+- Sequence ID: {seq['id']}
+- This sequence has already been generated.
+
+When the user sends short replies like "ok", "thanks", or "thx", 
+treat them as acknowledgment of the sequence you've created. 
+Do not generate a new sequence unless explicitly requested.
+"""
+            
+            # Add company context
             if user_info:
                 company_context = f"\nCOMPANY CONTEXT:\n"
                 if user_info.get('company_name'):
@@ -139,7 +171,10 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
                 if user_info.get('company_description'):
                     company_context += f"- Company Description: {user_info['company_description']}\n"
                 
-                system_message = f"{self.system_message}\n{company_context}"
+                system_message = f"{system_message}\n{company_context}"
+            
+            # Create message history excluding system messages
+            converted_messages = self._create_message_history(messages)
             
             # Get tools in the format expected by Anthropic
             tools = get_tools()
@@ -148,7 +183,7 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
             request_params = {
                 "model": self.model,
                 "system": system_message,
-                "messages": self._create_message_history(messages),
+                "messages": converted_messages,
                 "max_tokens": 1000,
                 "temperature": 0.7
             }
