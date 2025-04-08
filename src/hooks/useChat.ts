@@ -60,6 +60,117 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
     const id = crypto.randomUUID();
     setMessages((prev) => [...prev, { ...newMessage, id }]);
   };
+  
+  useEffect(() => {
+    const loadInitialHistory = async () => {
+      if (!userId) {
+        console.log("No user ID provided, skipping initial history load");
+        return;
+      }
+      console.log("Loading initial chat history for user:", userId);
+      try {
+        const response = await chatApi.getChatHistory(userId);
+        console.log("Initial history response:", response);
+        
+        // Debug the structure of response.data
+        console.log("Response data type:", typeof response.data);
+        console.log("Response data structure:", response.data);
+        
+        // Handle different response structures - check if data is itself an object with 'data' property
+        let historyData;
+        if (response.success) {
+          if (Array.isArray(response.data)) {
+            // Direct array in response.data
+            historyData = response.data;
+          } else if (typeof response.data === 'object' && response.data !== null) {
+            // Check if it has a nested data array
+            if (response.data.data && Array.isArray(response.data.data)) {
+              historyData = response.data.data;
+            } else if (response.data.messages && Array.isArray(response.data.messages)) {
+              historyData = response.data.messages;
+            } else {
+              // Maybe it's a single message object or contains messages in a different property
+              console.log("Exploring response data properties:", Object.keys(response.data));
+              
+              // Check if any property contains an array that might be messages
+              for (const key of Object.keys(response.data)) {
+                const value = response.data[key];
+                if (Array.isArray(value) && value.length > 0) {
+                  console.log(`Found array in property '${key}':`, value);
+                  historyData = value;
+                  break;
+                }
+              }
+              
+              // If still no array found, convert the object to an array if it looks like a message
+              if (!historyData && 'content' in response.data && 'role' in response.data) {
+                historyData = [response.data];
+              }
+            }
+          }
+        }
+        
+        if (historyData && historyData.length > 0) {
+          console.log("Found history data:", historyData);
+          
+          // Convert each message to match Message type exactly
+          const processedMessages = historyData.map(msg => {
+            // Ensure message has all required properties
+            if (!msg || typeof msg !== 'object') {
+              console.warn("Invalid message format:", msg);
+              return null; // Skip invalid messages
+            }
+            
+            if (!msg.content) {
+              console.warn("Message missing content:", msg);
+              msg.content = ""; // Provide default content
+            }
+            
+            if (!msg.role) {
+              console.warn("Message missing role:", msg);
+              msg.role = "user"; // Default role
+            }
+            
+            if (!msg.id) {
+              console.warn("Message missing id:", msg);
+              msg.id = crypto.randomUUID(); // Generate id if missing
+            }
+            
+            // Create new object to ensure shape matches exactly
+            return {
+              id: msg.id,
+              role: msg.role,
+              content: msg.content
+            };
+          }).filter(Boolean); // Remove any null entries
+          
+          if (processedMessages.length > 0) {
+            console.log("Processed messages:", processedMessages);
+            
+            // Update state with a function to ensure latest state
+            setMessages(prevMessages => {
+              const welcomeMsg = prevMessages.find(m => m.id === "welcome");
+              const newMessages = welcomeMsg 
+                ? [welcomeMsg, ...processedMessages.filter(m => m.id !== "welcome")]
+                : processedMessages;
+              
+              console.log("Final message array to be set:", newMessages);
+              return newMessages;
+            });
+          } else {
+            console.warn("No valid messages found after processing");
+          }
+        } else {
+          console.warn("No valid history data found in response");
+        }
+      } catch (error) {
+        console.error("Error loading chat history:", error);
+      }
+    };
+    
+    console.log("Initial render, messages:", messages);
+    loadInitialHistory();
+  }, [userId]);
 
   // Function to fetch latest messages using standard HTTP
   const pollForUpdates = async () => {
@@ -129,6 +240,9 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
     setIsLoading(true);
     console.log("isLoading set to true");
 
+    // 添加关键日志，记录sequenceId的传递情况
+    console.log("Current sequenceId being sent with request:", sequenceId);
+    
     try {
       if (FEATURES.USE_BACKEND_API) {
         console.log("Using backend API to send message");
@@ -149,6 +263,11 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
           });
           
           console.log("Response received:", response);
+          
+          // 添加新日志，检查响应中的上下文信息
+          if (response.data && response.success && typeof response.data === 'object' && 'context' in response.data) {
+            console.log("Context from response:", (response.data as any).context);
+          }
           
           if (response.success) {
             console.log("Processing successful response");
@@ -187,68 +306,7 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
             const toolCalls = responseData.tool_calls || [];
             if (toolCalls.length > 0) {
               console.log("Processing tool calls:", toolCalls);
-              // Show what tools are being used
-              for (const toolCall of toolCalls) {
-                setActiveTool(toolCall.name);
-                
-                // Add a message indicating a tool is being used
-                addMessage({
-                  role: "system",
-                  content: `🔧 Using ${formatToolName(toolCall.name)}...`,
-                });
-                
-                // Display the result if available
-                if (toolCall.result) {
-                  console.log(`Tool ${toolCall.name} result:`, toolCall.result);
-                  
-                  if (toolCall.name === "generate_sequence") {
-                    // Handle sequence generation result
-                    addMessage({
-                      role: "system",
-                      content: "✅ Generated sequence successfully!",
-                    });
-                    
-                    // If we have sequence data, update the workspace
-                    const resultData = toolCall.result.result || toolCall.result;
-                    console.log("Generated sequence data:", resultData);
-                    
-                    if (resultData && resultData.position) {
-                      // Pass the entire result data instead of just additionalInfo
-                      // This ensures the sequence steps are passed to the useSequence hook
-                      onSequenceRequest(JSON.stringify(resultData));
-                      
-                      // 我们不需要额外的系统消息，因为generateSequenceFromMessage已经添加了一条助手消息
-                      // 只记录日志
-                      console.log(`Generated ${resultData.steps?.length || 0}-step sequence for ${resultData.position}`);
-                    } else if (toolCall.result.error) {
-                      addMessage({
-                        role: "system",
-                        content: `❌ Error generating sequence: ${toolCall.result.error}`,
-                      });
-                    }
-                  } else if (toolCall.name === "refine_sequence_step") {
-                    addMessage({
-                      role: "system",
-                      content: "✅ Refined sequence step successfully!",
-                    });
-                  } else if (toolCall.name === "analyze_sequence") {
-                    // Format the analysis result for display
-                    const resultData = toolCall.result.result || toolCall.result;
-                    const analysis = resultData?.analysis;
-                    if (analysis) {
-                      addMessage({
-                        role: "system", 
-                        content: `📊 **Sequence Analysis**:\n\nQuality: ${analysis.overall_quality}\n\nSuggestions:\n${analysis.suggestions.map(s => `- ${s}`).join('\n')}`,
-                      });
-                    }
-                  }
-                } else {
-                  console.warn(`Tool ${toolCall.name} has no result`);
-                }
-              }
-              
-              // Reset active tool
-              setActiveTool(null);
+              processToolCalls(toolCalls);
             }
 
             // 当从AI接收序列数据时
@@ -303,6 +361,57 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
       default:
         return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     }
+  };
+
+  // Handle specific tool calls in the response
+  const processToolCalls = (toolCalls) => {
+    // 添加了工具调用处理的专门函数
+    console.log("Processing tool calls:", toolCalls);
+    
+    for (const toolCall of toolCalls) {
+      console.log(`Processing tool call: ${toolCall.name}`);
+      setActiveTool(toolCall.name);
+      
+      // Add a message indicating a tool is being used
+      addMessage({
+        role: "system",
+        content: `🔧 Using ${formatToolName(toolCall.name)}...`,
+      });
+      
+      // Display the result if available
+      if (toolCall.result) {
+        console.log(`Tool ${toolCall.name} result:`, toolCall.result);
+        
+        if (toolCall.name === "generate_sequence") {
+          // Handle sequence generation result
+          addMessage({
+            role: "system",
+            content: "✅ Generated sequence successfully!",
+          });
+          
+          // If we have sequence data, update the workspace
+          const resultData = toolCall.result.result || toolCall.result;
+          console.log("Generated sequence data:", resultData);
+          
+          if (resultData && resultData.position) {
+            // Pass the entire result data to ensure sequence ID is passed
+            console.log("Passing full tool call result to sequence handler");
+            onSequenceRequest(JSON.stringify({
+              ...resultData,
+              _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
+            }));
+          } else if (toolCall.result.error) {
+            addMessage({
+              role: "system",
+              content: `❌ Error generating sequence: ${toolCall.result.error}`,
+            });
+          }
+        }
+      }
+    }
+    
+    // Reset active tool
+    setActiveTool(null);
   };
 
   // Only setup Socket.IO for scenarios requiring real-time updates

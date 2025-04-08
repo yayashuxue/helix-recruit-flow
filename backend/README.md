@@ -1,76 +1,67 @@
-# Helix Recruiting Agent Backend
+# Helix Recruiting Assistant - Backend
 
-This is the Flask backend for the Helix HR recruiting agent. It provides an API for chat functionality and sequence generation/management.
+## 上下文管理系统实现
 
-## Setup Instructions
+最近添加了会话上下文管理系统，解决了 AI 在对话过程中无法保持上下文的问题。该系统使 AI 能够记住活跃的序列，并正确处理简短命令，避免不必要地重新生成序列。
 
-### Prerequisites
+### 主要特性
 
-- Python 3.8+
-- PostgreSQL database (can be hosted on Railway, Render, or another provider)
-- virtualenv or another virtual environment tool
+1. **SessionState 模型**: 跟踪用户会话状态，包括活跃序列和上下文数据
+2. **SessionService**: 会话状态服务，管理上下文操作
+3. **上下文感知系统提示**: 动态生成包含当前上下文的 AI 系统提示
+4. **短消息处理**: 正确处理简短命令而不会触发序列重新生成
 
-### Environment Setup
+## 设置与运行
 
-1. Create and activate a virtual environment:
+### 1. 安装依赖
 
-```fish
-python -m venv venv
-source venv/bin/activate.fish
-```
-
-2. Install dependencies:
-
-```fish
+```bash
 pip install -r requirements.txt
 ```
 
-3. Configure your `.env` file with your PostgreSQL connection string:
+### 2. 环境变量
+
+创建`.env`文件:
 
 ```
-SQLALCHEMY_DATABASE_URI=postgresql://username:password@hostname:port/database
+FLASK_APP=app
+FLASK_ENV=development
+SQLALCHEMY_DATABASE_URI=sqlite:///helix.db
+ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-### Using Railway for PostgreSQL
+### 3. 数据库重置 (开发环境)
 
-1. Create a PostgreSQL instance on [Railway](https://railway.app)
-2. Get the connection URL from the Railway dashboard
-3. Update your `.env` file with the connection URL
+由于当前处于原型开发阶段，可以使用重置脚本清空并重建数据库：
 
-### Initialize the Database
-
-Initialize the database with:
-
-```fish
-flask --app app init-db
+```bash
+python reset_db.py
 ```
 
-### Running the Application
+注意：此操作会**删除所有现有数据**并重建数据库结构。
 
-Start the application with:
+### 4. 运行服务器
 
-```fish
-FLASK_APP=app python -m flask run --port=5001
+```bash
+python run.py
 ```
 
-The server will run on http://localhost:5000 by default.
+## API 端点
 
-## API Endpoints
+- `/api/chat/message` - 发送聊天消息
+- `/api/sequences/generate` - 生成新的招聘序列
+- `/api/sequences/update` - 更新现有序列
 
-### Chat API
+## 上下文管理工作原理
 
-- `POST /api/chat/message` - Send a message and get an AI response
-- `GET /api/chat/history/<user_id>` - Get chat history for a user
+1. 每个用户会话都有一个持久化的会话状态
+2. 会话状态跟踪活跃的序列 ID 和最近的操作
+3. 在每次 AI 请求中，将上下文信息注入到系统提示中
+4. 对于简短消息，会添加特殊的指示以避免重新生成序列
 
-### Sequence API
+## 技术实现
 
-- `POST /api/sequences/generate` - Generate a new recruiting sequence
-- `PUT /api/sequences/update` - Update an existing sequence
-- `GET /api/sequences/<sequence_id>` - Get a specific sequence
-- `GET /api/sequences/user/<user_id>` - Get all sequences for a user
-- `POST /api/sequences/refine` - Refine a specific step in a sequence
-
-## Socket.IO Events
-
-- `new_message` - Emitted when a new chat message is created
-- `sequence_updated` - Emitted when a sequence is created or updated
+- `SessionState` 模型 - 存储会话状态
+- `SessionService` - 管理会话状态操作
+- 会话上下文的动态系统提示生成
+- 前后端状态同步

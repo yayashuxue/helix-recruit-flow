@@ -54,6 +54,19 @@ const ChatInterface = ({
     console.log("ChatInterface: isLoading changed to:", isLoading);
   }, [isLoading]);
 
+  // Add debug logging when messages prop changes
+  useEffect(() => {
+    console.log("ChatInterface received messages:", messages);
+    console.log("Messages count:", messages.length);
+    // Log the first few messages if they exist
+    if (messages.length > 0) {
+      console.log("First message:", messages[0]);
+      if (messages.length > 1) {
+        console.log("Second message:", messages[1]);
+      }
+    }
+  }, [messages]);
+
   const sendMessageWithTimeout = async () => {
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Request timeout")), 15000)

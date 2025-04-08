@@ -17,9 +17,20 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
   const [sequenceTitle, setSequenceTitle] = useState<string>("New Sequence");
   const [sequencePosition, setSequencePosition] = useState<string>("Position");
 
+  // 增加sequenceId的设置监听器
+  useEffect(() => {
+    console.log("sequenceId updated:", sequenceId);
+  }, [sequenceId]);
+
   const generateSequenceFromMessage = async (userMessage: string, addMessage: (message: Omit<import("@/types/chat").Message, "id">) => void) => {
     // 判断是否已经有序列以及消息的类型
     const hasExistingSequence = sequence.length > 0;
+    console.log("generateSequenceFromMessage called", { 
+      messageLength: userMessage.length,
+      hasExistingSequence,
+      currentSequenceId: sequenceId,
+      sequenceLength: sequence.length
+    });
     
     // 非序列数据JSON，是正常用户消息
     if (!userMessage.includes('"steps"')) {
@@ -67,6 +78,13 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
         setIsGenerating(true);
         
         try {
+          // 检查是否是来自工具调用的结果
+          if (parsedData._toolCall && parsedData._toolCall.name === "generate_sequence") {
+            console.log("Sequence data comes from tool call:", parsedData._toolCall);
+            // 调用我们新增的处理函数
+            handleToolCallResultWithID(parsedData._toolCall);
+          }
+          
           if (parsedData.id) {
             console.log("IMPORTANT: Setting sequence ID from parsed data:", parsedData.id);
             setSequenceId(parsedData.id);
@@ -355,11 +373,25 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
     setIsSaving(false);
   };
 
-  const syncSequenceId = (id: string) => {
-    if (id && id !== sequenceId) {
-      console.log(`Syncing sequence ID from external source: ${id}`);
-      setSequenceId(id);
+  // 修改处理序列工具调用结果的逻辑
+  const handleToolCallResultWithID = (toolCall) => {
+    if (toolCall && toolCall.name === "generate_sequence" && toolCall.result) {
+      console.log("Processing generate_sequence tool call result:", toolCall);
+      // 从工具调用结果中提取序列ID
+      const resultData = toolCall.result.result || toolCall.result;
+      if (resultData && resultData.id) {
+        console.log("✅ SETTING SEQUENCE ID FROM TOOL CALL:", resultData.id);
+        setSequenceId(resultData.id);
+      } else {
+        console.warn("⚠️ Tool call result doesn't contain a valid sequence ID");
+      }
     }
+  };
+
+  // 添加序列ID同步方法
+  const syncSequenceId = (id: string) => {
+    console.log("Manually syncing sequence ID:", id);
+    setSequenceId(id);
   };
 
   return {

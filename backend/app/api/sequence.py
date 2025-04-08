@@ -1,13 +1,15 @@
 from flask import Blueprint, request, jsonify, current_app
+from datetime import datetime
 from .. import socketio
 from ..database.db import db
 from ..models import User, Sequence, SequenceStep
 from ..services.sequence_service import SequenceService
+from ..services.session_service import SessionService
 
 bp = Blueprint('sequence', __name__)
 
-# Don't initialize SequenceService at module level
-# We'll get an instance when needed within route functions
+# Don't initialize services at module level
+# We'll get instances when needed within route functions
 
 @bp.route('/generate', methods=['POST'])
 def generate_sequence():
@@ -48,6 +50,18 @@ def generate_sequence():
             additional_info=additional_info
         ))
         
+        # Update session state with new sequence
+        session_service = SessionService.get_instance()
+        session_service.update_session(user_id, {
+            'active_sequence_id': sequence.id,
+            'last_action': 'generate_sequence',
+            'context_data': {
+                'sequence_position': position,
+                'sequence_title': title,
+                'generated_at': datetime.utcnow().isoformat()
+            }
+        })
+        
         # Emit event that a new sequence has been created
         socketio.emit('sequence_updated', sequence.to_dict())
         
@@ -87,6 +101,17 @@ def update_sequence():
         
         if not updated_sequence:
             return jsonify({'success': False, 'error': 'Sequence not found'}), 404
+        
+        # Update session state
+        session_service = SessionService.get_instance()
+        session_service.update_session(user_id, {
+            'active_sequence_id': sequence_id,
+            'last_action': 'update_sequence',
+            'context_data': {
+                'updated_at': datetime.utcnow().isoformat(),
+                'steps_count': len(steps)
+            }
+        })
         
         # Emit event that sequence has been updated
         socketio.emit('sequence_updated', updated_sequence)

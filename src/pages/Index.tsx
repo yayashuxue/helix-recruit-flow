@@ -34,6 +34,12 @@ const Index = () => {
 
   const { messages, isLoading, handleUserMessage, addMessage } = chatHook;
 
+  // 增加调试日志的包装函数
+  const handleMessageWithLog = (content: string) => {
+    console.log("User sending message with current sequenceId:", sequenceId);
+    return handleUserMessage(content);
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -45,7 +51,7 @@ const Index = () => {
         <div className="flex-1 flex flex-col border-r border-gray-200 bg-white max-w-md">
           <ChatInterface
             messages={messages}
-            onSendMessage={handleUserMessage}
+            onSendMessage={handleMessageWithLog}
             isLoading={isLoading}
             messagesEndRef={messagesEndRef}
           />

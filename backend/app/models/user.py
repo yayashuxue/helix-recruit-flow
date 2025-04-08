@@ -17,6 +17,7 @@ class User(db.Model):
     # Relationships
     sequences = relationship('Sequence', back_populates='user', cascade='all, delete-orphan')
     messages = relationship('ChatMessage', back_populates='user', cascade='all, delete-orphan')
+    session_states = relationship('SessionState', back_populates='user', cascade='all, delete-orphan')
     
     def to_dict(self):
         return {
