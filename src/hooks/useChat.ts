@@ -25,6 +25,27 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
   const [useFallbackPolling, setUseFallbackPolling] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track whether we're in a save operation to prevent redundant updates
+  const isLocalUpdateRef = useRef(false);
+
+  // Setup event listener for save operations
+  useEffect(() => {
+    const handleSaveStarted = () => {
+      console.log('Detected local save operation, ignoring next socket update');
+      isLocalUpdateRef.current = true;
+      
+      // Reset the flag after a reasonable timeout in case the save response is delayed
+      setTimeout(() => {
+        isLocalUpdateRef.current = false;
+      }, 5000);
+    };
+    
+    window.addEventListener('sequence_save_started', handleSaveStarted);
+    
+    return () => {
+      window.removeEventListener('sequence_save_started', handleSaveStarted);
+    };
+  }, []);
 
   // Clear polling interval on unmount
   useEffect(() => {
@@ -343,12 +364,31 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
     // Only listen for specific events relevant to sequences
     socket.on('sequence_updated', (data) => {
       try {
-        console.log("Received sequence update:", data);
-        // Extract the sequence data
-        const sequenceData = data.result;
+        console.log("Received sequence update from socket:", data);
         
-        // Use onSequenceRequest to update the sequence in the workspace
+        // Skip if this is just a response to our own save operation
+        if (isLocalUpdateRef.current) {
+          console.log("Ignoring socket update as it's from our own save operation");
+          isLocalUpdateRef.current = false;
+          return;
+        }
+        
+        // Important fix: correctly extract sequence data
+        // data might be {result: {...}} or directly the sequence object
+        const sequenceData = data.result || data;
+        
+        console.log("Extracted sequence data:", sequenceData);
+        
+        // Check if sequence ID exists
+        if (sequenceData && sequenceData.id) {
+          console.log("Found sequence ID in socket event:", sequenceData.id);
+        } else {
+          console.warn("No sequence ID found in socket data");
+        }
+        
+        // Ensure we pass complete data to sequence processing function
         if (sequenceData && sequenceData.steps) {
+          console.log("Passing complete sequence data to useSequence");
           onSequenceRequest(JSON.stringify(sequenceData));
         }
       } catch (error) {
@@ -366,17 +406,8 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
       console.log('Socket.IO disconnected, reason:', reason);
     });
     
-    // 添加调试信息
-    useEffect(() => {
-      console.log("Socket.IO connection status:", socketRef.current ? "connected" : "disconnected");
-      
-      return () => {
-        if (socketRef.current) {
-          console.log("Disconnecting Socket.IO connection");
-          socketRef.current.disconnect();
-        }
-      };
-    }, []);
+    // Log connection status (move this out of nested useEffect)
+    console.log("Socket.IO connection status:", socketRef.current ? "connected" : "disconnected");
     
     return () => {
       console.log('Disconnecting Socket.IO');
@@ -386,6 +417,13 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
       }
     };
   }, [sequenceId, useFallbackPolling, onSequenceRequest]);
+
+  // Add separate useEffect for logging socket connection status
+  useEffect(() => {
+    if (socketRef.current) {
+      console.log("Socket.IO connection status updated:", socketRef.current.connected ? "connected" : "disconnected");
+    }
+  }, []);
 
   return {
     messages,

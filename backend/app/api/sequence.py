@@ -38,12 +38,15 @@ def generate_sequence():
         
         # Get SequenceService instance and create sequence
         sequence_service = SequenceService.get_instance()
-        sequence = sequence_service.create_sequence(
+        
+        # Handle async function with asyncio.run()
+        import asyncio
+        sequence = asyncio.run(sequence_service.create_sequence(
             user_id=user_id,
             title=title,
             position=position,
             additional_info=additional_info
-        )
+        ))
         
         # Emit event that a new sequence has been created
         socketio.emit('sequence_updated', sequence.to_dict())
@@ -74,10 +77,13 @@ def update_sequence():
     try:
         # Get SequenceService instance and update sequence
         sequence_service = SequenceService.get_instance()
-        updated_sequence = sequence_service.update_sequence(
+        
+        # Create a synchronous wrapper to handle the async function
+        import asyncio
+        updated_sequence = asyncio.run(sequence_service.update_sequence(
             sequence_id=sequence_id,
             updated_steps=steps
-        )
+        ))
         
         if not updated_sequence:
             return jsonify({'success': False, 'error': 'Sequence not found'}), 404
@@ -97,19 +103,22 @@ def update_sequence():
 @bp.route('/<sequence_id>', methods=['GET'])
 def get_sequence(sequence_id):
     """
-    Get a specific sequence by ID.
+    Get a sequence by ID.
     """
     try:
         # Get SequenceService instance and retrieve sequence
         sequence_service = SequenceService.get_instance()
-        sequence = sequence_service.get_sequence(sequence_id)
+        
+        # Handle async function with asyncio.run()
+        import asyncio
+        sequence = asyncio.run(sequence_service.get_sequence(sequence_id))
         
         if not sequence:
             return jsonify({'success': False, 'error': 'Sequence not found'}), 404
         
         return jsonify({
             'success': True,
-            'data': sequence
+            'data': sequence.to_dict() if sequence else None
         })
         
     except Exception as e:
@@ -152,18 +161,21 @@ def refine_step():
     try:
         # Get SequenceService instance and refine step
         sequence_service = SequenceService.get_instance()
-        updated_step = sequence_service.refine_step(
+        
+        # Handle async function with asyncio.run()
+        import asyncio
+        updated_step = asyncio.run(sequence_service.refine_step(
             sequence_id=sequence_id,
             step_id=step_id,
             feedback=feedback
-        )
+        ))
         
         if not updated_step:
             return jsonify({'success': False, 'error': 'Step not found'}), 404
         
         # Get the full sequence to emit an update
-        sequence = sequence_service.get_sequence(sequence_id)
-        socketio.emit('sequence_updated', sequence)
+        sequence = asyncio.run(sequence_service.get_sequence(sequence_id))
+        socketio.emit('sequence_updated', sequence.to_dict() if sequence else {})
         
         return jsonify({
             'success': True,

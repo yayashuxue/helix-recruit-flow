@@ -52,7 +52,6 @@ const Index = () => {
         </div>
         <div className="flex-1 bg-white">
           <Workspace
-          
             sequence={sequence}
             isGenerating={isGenerating}
             isSaving={isSaving}

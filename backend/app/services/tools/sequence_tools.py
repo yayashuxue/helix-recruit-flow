@@ -51,6 +51,7 @@ async def _generate_sequence(position: str, additional_info: str = None, user_id
         if hasattr(sequence, 'to_dict'):
             sequence_data = sequence.to_dict()
             return {
+                "id": sequence.id,
                 "position": position,
                 "title": sequence_title,
                 "steps": sequence_data['steps'],

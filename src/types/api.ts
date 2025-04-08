@@ -25,12 +25,15 @@ export interface SequenceRequest {
   position: string;
   userId: string;
   additionalInfo?: string;
+  steps?: SequenceStep[];
 }
 
 export interface SequenceUpdateRequest {
   sequenceId: string;
   steps: SequenceStep[];
   userId: string;
+  title?: string;
+  position?: string;
 }
 
 export interface User {

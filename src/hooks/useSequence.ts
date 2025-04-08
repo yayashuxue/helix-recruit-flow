@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { SequenceStep } from "@/types/sequence";
 import { generateSequence } from "@/services/aiService";
@@ -18,23 +18,25 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
   const [sequencePosition, setSequencePosition] = useState<string>("Position");
 
   const generateSequenceFromMessage = async (userMessage: string, addMessage: (message: Omit<import("@/types/chat").Message, "id">) => void) => {
-    // Check if we received pre-generated sequence data (JSON stringified)
     try {
-      // Try to parse as JSON first to see if we received pre-generated data
+      // Parse JSON data if available
+      console.log("Parsing message data:", userMessage.substring(0, 100) + "...");
       const parsedData = JSON.parse(userMessage);
       
-      // If this is a pre-generated sequence with steps, use it directly
       if (parsedData && parsedData.steps && Array.isArray(parsedData.steps)) {
         console.log("Using pre-generated sequence:", parsedData);
         setIsGenerating(true);
+        
         try {
-          // Set the sequence directly from the parsed data
-          setSequence(parsedData.steps);
-          
           if (parsedData.id) {
+            console.log("IMPORTANT: Setting sequence ID from parsed data:", parsedData.id);
             setSequenceId(parsedData.id);
-            console.log("Setting real sequence ID:", parsedData.id);
+          } else {
+            console.warn("WARNING: No ID found in parsed sequence data");
           }
+          
+          // 然后设置其他数据
+          setSequence(parsedData.steps);
           
           if (parsedData.title) {
             setSequenceTitle(parsedData.title);
@@ -133,9 +135,10 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
         if (response.success && response.data) {
           setSequence(response.data.steps);
           
+          // IMPORTANT FIX: Store the sequence ID returned from the backend
           if (response.data.id) {
+            console.log("Setting sequence ID from API response:", response.data.id);
             setSequenceId(response.data.id);
-            console.log("Backend returned sequence ID:", response.data.id);
           }
         } else {
           console.log("Backend API failed, falling back to direct AI service");
@@ -171,50 +174,85 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
   };
 
   const saveSequence = async () => {
+    console.log("Save sequence called, current sequenceId:", sequenceId);
+    console.log("Current sequence state:", { 
+      title: sequenceTitle, 
+      position: sequencePosition,
+      stepsCount: sequence.length 
+    });
+    
     if (sequence.length === 0) {
       toast.error("Can't save an empty sequence");
       return;
     }
     
+    // Dispatch event to notify that a local save operation is starting
+    window.dispatchEvent(new CustomEvent('sequence_save_started'));
+    
     setIsSaving(true);
     
     try {
+      // Check if sequenceId is valid (not null, undefined, or empty string)
       if (sequenceId) {
-        const response = await sequenceApi.update({
-          sequenceId: sequenceId,
-          steps: [...sequence],
-          userId,
-        });
+        console.log("Updating existing sequence with ID:", sequenceId);
         
-        if (response.success) {
-          toast.success("Sequence saved successfully");
-        } else {
-          toast.error("Failed to save sequence");
-        }
-      } else {
-        const response = await sequenceApi.generate({
-          title: sequenceTitle,
-          position: sequencePosition,
-          userId,
-          additionalInfo: "Created from workspace",
-        });
-        
-        if (response.success && response.data && response.data.id) {
-          setSequenceId(response.data.id);
-          toast.success("New sequence created and saved");
-          
-          await sequenceApi.update({
-            sequenceId: response.data.id,
+        try {
+          // Update existing sequence with update API
+          const response = await sequenceApi.update({
+            sequenceId: sequenceId,
+            title: sequenceTitle, // Add title to update
+            position: sequencePosition, // Add position to update
             steps: [...sequence],
             userId,
           });
-        } else {
-          toast.error("Failed to create new sequence");
+          
+          if (response.success) {
+            toast.success("Sequence updated successfully");
+            console.log("Sequence updated successfully with ID:", sequenceId);
+          } else {
+            console.error("Update failed:", response.error);
+            toast.error("Failed to update sequence: " + (response.error || "Unknown error"));
+          }
+        } catch (updateError) {
+          console.error("Error during sequence update:", updateError);
+          toast.error("Error updating sequence: " + (updateError instanceof Error ? updateError.message : "Unknown error"));
+        }
+      } else {
+        console.log("No valid sequence ID found - creating new sequence");
+        
+        try {
+          // Create new sequence only when no ID exists
+          const response = await sequenceApi.generate({
+            title: sequenceTitle,
+            position: sequencePosition,
+            userId,
+            additionalInfo: "Created from workspace",
+            steps: sequence, // Add steps to initial creation
+          });
+          
+          if (response.success && response.data) {
+            // Store new ID
+            if (response.data.id) {
+              const newId = response.data.id;
+              console.log("New sequence created with ID:", newId);
+              setSequenceId(newId);
+              toast.success("New sequence created and saved");
+            } else {
+              console.error("Create succeeded but no ID returned");
+              toast.warning("Sequence created but ID not returned properly");
+            }
+          } else {
+            console.error("Create failed:", response.error || "No data returned");
+            toast.error("Failed to create sequence: " + (response.error || "No data returned"));
+          }
+        } catch (createError) {
+          console.error("Error during sequence creation:", createError);
+          toast.error("Error creating sequence: " + (createError instanceof Error ? createError.message : "Unknown error"));
         }
       }
     } catch (error) {
-      console.error("Error saving sequence:", error);
-      toast.error("Error saving sequence");
+      console.error("Overall error in save sequence:", error);
+      toast.error("Error saving sequence: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSaving(false);
     }
@@ -236,6 +274,49 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
     // 不立即同步到服务器，等待用户主动保存
   };
 
+  // Enhanced debugging helper: log state changes and ID tracking
+  useEffect(() => {
+    const logState = {
+      hasSequence: sequence.length > 0,
+      sequenceId,
+      sequenceTitle,
+      sequencePosition,
+      stepCount: sequence.length
+    };
+    
+    console.log("useSequence hook state updated:", logState);
+    
+    // Special log when sequenceId changes
+    if (sequenceId) {
+      console.log("⭐ Sequence ID is now set to:", sequenceId);
+      // Add verification to ensure ID is properly stored
+      console.log("Verification - Current sequence state with ID:", {
+        id: sequenceId,
+        title: sequenceTitle,
+        position: sequencePosition,
+        steps: sequence.length
+      });
+    }
+  }, [sequenceId, sequence.length, sequenceTitle, sequencePosition]);
+
+  // 重置序列状态的函数（用于调试）
+  const resetSequenceState = () => {
+    console.log("Resetting sequence state");
+    setSequence([]);
+    setSequenceId(null);
+    setSequenceTitle("New Sequence");
+    setSequencePosition("Position");
+    setIsGenerating(false);
+    setIsSaving(false);
+  };
+
+  const syncSequenceId = (id: string) => {
+    if (id && id !== sequenceId) {
+      console.log(`Syncing sequence ID from external source: ${id}`);
+      setSequenceId(id);
+    }
+  };
+
   return {
     sequence,
     isGenerating,
@@ -249,5 +330,7 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
     removeSequenceStep,
     saveSequence,
     setSequenceTitle,
+    resetSequenceState,
+    syncSequenceId,
   };
 };
