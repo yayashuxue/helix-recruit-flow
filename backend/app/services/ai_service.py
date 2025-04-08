@@ -149,19 +149,34 @@ The recruiter can view and edit the sequence in the workspace panel. You can hel
             system_message = self.system_message
             
             # Add session context if available
+            active_sequence_id = None
             if session_context and session_context.get('active_sequence'):
                 seq = session_context['active_sequence']
-                system_message += f"""
+                active_sequence_id = seq.get('id')
+                
+                # 从数据库获取最新序列信息
+                from ..models import Sequence, SequenceStep
+                sequence = Sequence.query.get(active_sequence_id)
+                
+                if sequence:
+                    steps = SequenceStep.query.filter_by(sequence_id=active_sequence_id).order_by(SequenceStep.order).all()
+                    steps_info = []
+                    
+                    for step in steps:
+                        steps_info.append({
+                            "id": step.id,
+                            "title": step.title,
+                            "order": step.order
+                        })
+                    
+                    sequence_context = f"""
+ACTIVE SEQUENCE: {sequence.position} (ID: {sequence.id})
+STEPS: {', '.join([f"{s['title']} (ID: {s['id']})" for s in steps_info])}
 
-IMPORTANT CONTEXT:
-- Active sequence: {seq['position']}
-- Sequence ID: {seq['id']}
-- This sequence has already been generated.
-
-When the user sends short replies like "ok", "thanks", or "thx", 
-treat them as acknowledgment of the sequence you've created. 
-Do not generate a new sequence unless explicitly requested.
+When modifying a step, use the correct step ID from above.
+When the user doesn't specify which step to modify, assume they mean the entire sequence or the first step.
 """
+                    system_message += sequence_context
             
             # Add company context
             if user_info:
@@ -211,12 +226,15 @@ Do not generate a new sequence unless explicitly requested.
                 if content.type == "tool_use":
                     # Add user_id from context if available and not explicitly set
                     tool_arguments = content.input
-                    if user_info and 'user_id' in user_info and content.name == "generate_sequence":
-                        # Only inject user_id if it's not already present
-                        if 'user_id' not in tool_arguments or not tool_arguments.get('user_id'):
-                            tool_arguments = {**tool_arguments, 'user_id': user_info['user_id']}
-                            print(f"Injected user_id {user_info['user_id']} into tool arguments")
-                            
+                    if user_info and 'user_id' in user_info:
+                        if 'user_id' not in tool_arguments:
+                            tool_arguments['user_id'] = user_info['user_id']
+                    
+                    # Add sequence_id from context if available and not explicitly set
+                    if active_sequence_id and content.name == "refine_sequence_step":
+                        if 'sequence_id' not in tool_arguments:
+                            tool_arguments['sequence_id'] = active_sequence_id
+                    
                     # Execute the tool call and get the result
                     tool_result = await execute_tool_call({
                         "name": content.name,

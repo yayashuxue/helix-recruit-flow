@@ -66,6 +66,17 @@ async def execute_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
         # Execute the function with the provided arguments
         try:
             result = await function(**arguments)
+            
+            # 记录成功并通过socketio发送通知
+            try:
+                from .. import socketio
+                socketio.emit('tool_execution_complete', {
+                    'name': tool_name,
+                    'success': True
+                })
+            except Exception as e:
+                print(f"Error emitting tool execution event: {str(e)}")
+                
             return {"result": result}
         except Exception as e:
             error_message = f"Error executing tool '{tool_name}': {str(e)}"
@@ -74,6 +85,17 @@ async def execute_tool_call(tool_call: Dict[str, Any]) -> Dict[str, Any]:
                 current_app.logger.error(f"{error_message}\n{stack_trace}")
             except RuntimeError:
                 print(f"{error_message}\n{stack_trace}")
+            
+            # 发送失败通知
+            try:
+                from .. import socketio
+                socketio.emit('tool_execution_complete', {
+                    'name': tool_name,
+                    'success': False,
+                    'error': str(e)
+                })
+            except Exception as e2:
+                print(f"Error emitting tool error event: {str(e2)}")
             
             return {"error": error_message}
             

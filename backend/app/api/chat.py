@@ -84,6 +84,27 @@ async def send_message():
         
         # 如果有工具调用，将工具调用和结果添加到历史中
         if response.get('tool_calls') and len(response['tool_calls']) > 0:
+            tool_call = response['tool_calls'][0]
+            tool_name = tool_call['name']
+            
+            # 添加工具执行完成的系统消息
+            if tool_name == "refine_sequence_step" and "error" not in tool_call.get('result', {}):
+                # 添加到响应
+                chat_message = ChatMessage(
+                    user_id=user_id,
+                    role="system",
+                    content="✅ Sequence updated successfully!"
+                )
+                db.session.add(chat_message)
+                db.session.commit()
+                
+                # 添加到返回消息中
+                history.append({
+                    "role": "system",
+                    "content": "✅ Sequence updated successfully!",
+                    "id": chat_message.id
+                })
+            
             # 添加工具调用记录
             history.append({
                 'role': 'assistant',

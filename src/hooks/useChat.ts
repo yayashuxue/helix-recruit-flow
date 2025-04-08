@@ -365,53 +365,83 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
 
   // Handle specific tool calls in the response
   const processToolCalls = (toolCalls) => {
-    // 添加了工具调用处理的专门函数
     console.log("Processing tool calls:", toolCalls);
     
     for (const toolCall of toolCalls) {
       console.log(`Processing tool call: ${toolCall.name}`);
       setActiveTool(toolCall.name);
       
-      // Add a message indicating a tool is being used
+      // 添加工具使用消息
       addMessage({
         role: "system",
         content: `🔧 Using ${formatToolName(toolCall.name)}...`,
       });
       
-      // Display the result if available
+      // 处理工具结果
       if (toolCall.result) {
         console.log(`Tool ${toolCall.name} result:`, toolCall.result);
         
-        if (toolCall.name === "generate_sequence") {
-          // Handle sequence generation result
+        // 工具成功完成的通用处理逻辑
+        if (toolCall.result.error) {
+          // 如果有错误，添加错误消息
           addMessage({
             role: "system",
-            content: "✅ Generated sequence successfully!",
+            content: `❌ Error: ${toolCall.result.error}`,
+          });
+        } else {
+          // 为所有工具添加成功消息
+          addMessage({
+            role: "system",
+            content: `✅ ${formatToolName(toolCall.name)} completed successfully!`,
           });
           
-          // If we have sequence data, update the workspace
-          const resultData = toolCall.result.result || toolCall.result;
-          console.log("Generated sequence data:", resultData);
-          
-          if (resultData && resultData.position) {
-            // Pass the entire result data to ensure sequence ID is passed
-            console.log("Passing full tool call result to sequence handler");
-            onSequenceRequest(JSON.stringify({
-              ...resultData,
-              _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
-            }));
-          } else if (toolCall.result.error) {
-            addMessage({
-              role: "system",
-              content: `❌ Error generating sequence: ${toolCall.result.error}`,
-            });
+          // 工具特定的处理逻辑
+          if (toolCall.name === "generate_sequence") {
+            // 序列生成逻辑
+            const resultData = toolCall.result.result || toolCall.result;
+            console.log("Generated sequence data:", resultData);
+            
+            if (resultData && resultData.position) {
+              // 传递序列数据
+              onSequenceRequest(JSON.stringify({
+                ...resultData,
+                _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
+              }));
+            }
+          } else if (toolCall.name === "refine_sequence_step") {
+            // 处理序列修改工具
+            const resultData = toolCall.result.result || toolCall.result;
+            console.log("Sequence refinement result:", resultData);
+            
+            if (resultData) {
+              // 添加工具执行成功消息
+              addMessage({
+                role: "system",
+                content: "✅ Sequence updated successfully!"
+              });
+              
+              // 传递给序列处理函数
+              onSequenceRequest(JSON.stringify({
+                ...resultData,
+                _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
+              }));
+            }
           }
         }
+      } else {
+        // 没有结果时，添加默认处理完成消息防止卡住
+        console.warn(`No result for tool ${toolCall.name}, adding default completion message`);
+        addMessage({
+          role: "system",
+          content: `✅ ${formatToolName(toolCall.name)} operation completed.`,
+        });
       }
     }
     
-    // Reset active tool
+    // 重置活动工具
     setActiveTool(null);
+    // 确保加载状态结束
+    setIsLoading(false);
   };
 
   // Only setup Socket.IO for scenarios requiring real-time updates

@@ -71,41 +71,50 @@ async def _generate_sequence(position: str, additional_info: str = None, user_id
         print(traceback.format_exc())
         return {"error": str(e)}
 
-async def _refine_sequence_step(
-    step_id: str, 
-    feedback: str,
-    content: Optional[str] = None
-) -> Dict[str, Any]:
-    """Refine a specific step in a recruiting sequence.
-    
-    Args:
-        step_id: The ID of the step to refine
-        feedback: Feedback or instructions for refining the step
-        content: Optional new content for the step
-        
-    Returns:
-        The updated step as a dictionary
-    """
+async def _refine_sequence_step(step_id: str = None, feedback: str = None, content: str = None, user_id: Optional[str] = None, sequence_id: Optional[str] = None):
+    """Refine a specific step in a sequence."""
     try:
-        # Import here to avoid circular imports
         from ..sequence_service import SequenceService
+        from ...models import SequenceStep, Sequence
+        from ...database.db import db
         
-        # Get SequenceService instance and refine step
+        # 获取步骤逻辑（与之前相同）
+        if not step_id and sequence_id:
+            steps = SequenceStep.query.filter_by(sequence_id=sequence_id).order_by(SequenceStep.order).all()
+            if steps:
+                step_id = steps[0].id
+        
+        if not step_id:
+            return {"error": "No step ID provided or found", "status": "error"}
+            
+        step = SequenceStep.query.get(step_id)
+        if not step:
+            # 如果找不到步骤，尝试从活跃序列中找
+            if sequence_id:
+                steps = SequenceStep.query.filter_by(sequence_id=sequence_id).all()
+                if steps:
+                    step = steps[0]
+                    step_id = step.id
+        
+        if not step:
+            return {"error": f"Step not found", "status": "error"}
+            
+        # 执行修改逻辑 - 关键修改：使用content或feedback
         sequence_service = SequenceService.get_instance()
-        updated_step = await sequence_service.refine_sequence_step(
-            step_id=step_id,
-            feedback=feedback,
-            content=content
-        )
+        if content:  # 如果提供了content，直接使用
+            result = await sequence_service.refine_sequence_step(step_id, feedback, content)
+        else:  # 否则只使用feedback
+            result = await sequence_service.refine_sequence_step(step_id, feedback)
         
-        return updated_step.to_dict()
+        return {
+            "step_id": step_id,
+            "content": result.content,
+            "title": result.title,
+            "status": "success"
+        }
+        
     except Exception as e:
-        # Log the error
-        try:
-            current_app.logger.error(f"Error refining sequence step: {str(e)}")
-        except RuntimeError:
-            print(f"Error refining sequence step: {str(e)}")
-        raise
+        return {"error": str(e), "status": "error"}
 
 async def _analyze_sequence(sequence_id: str) -> Dict[str, Any]:
     """Analyze a recruiting sequence and provide suggestions for improvement.
@@ -177,26 +186,34 @@ generate_sequence_tool = {
 # Define refine sequence step tool
 refine_sequence_step_tool = {
     "name": "refine_sequence_step",
-    "description": "Refine a specific step in a recruiting sequence",
+    "description": "Refine or modify a specific step in a recruiting sequence based on feedback",
+    "function": _refine_sequence_step,
     "input_schema": {
         "type": "object",
         "properties": {
             "step_id": {
                 "type": "string",
-                "description": "The ID of the step to refine"
+                "description": "ID of the sequence step to refine"
+            },
+            "feedback": {
+                "type": "string", 
+                "description": "Feedback or instructions for refining the step"
             },
             "content": {
                 "type": "string",
-                "description": "The new content for the step"
+                "description": "New content to replace the step content directly"
             },
-            "feedback": {
+            "user_id": {
                 "type": "string",
-                "description": "Feedback or instructions for refining the step"
+                "description": "ID of the user who owns the sequence"
+            },
+            "sequence_id": {
+                "type": "string",
+                "description": "ID of the sequence containing the step"
             }
         },
-        "required": ["step_id", "feedback"]
-    },
-    "function": _refine_sequence_step
+        "required": []  # 没有必须参数，允许更灵活的调用
+    }
 }
 
 # Define analyze sequence tool

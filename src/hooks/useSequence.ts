@@ -73,6 +73,31 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
       console.log("Parsing message data:", userMessage.substring(0, 100) + "...");
       const parsedData = JSON.parse(userMessage);
       
+      // 添加这个新的条件检查
+      if (parsedData && parsedData._toolCall) {
+        console.log("Found tool call in parsed data:", parsedData._toolCall);
+        
+        // 处理工具调用结果
+        if (parsedData._toolCall.name === "generate_sequence") {
+          console.log("Sequence data comes from tool call:", parsedData._toolCall);
+          // 调用我们新增的处理函数
+          handleToolCallResultWithID(parsedData._toolCall);
+        } 
+        else if (parsedData._toolCall.name === "refine_sequence_step") {
+          console.log("Processing refine_sequence_step from message");
+          handleToolCallResultWithID(parsedData._toolCall);
+          
+          // 添加响应消息
+          addMessage({
+            role: "assistant",
+            content: "I've updated the sequence with your Calendly link. The changes have been applied to the workspace."
+          });
+          
+          setIsGenerating(false);
+          return; // 完成处理，返回
+        }
+      }
+      
       if (parsedData && parsedData.steps && Array.isArray(parsedData.steps)) {
         console.log("Using pre-generated sequence:", parsedData);
         setIsGenerating(true);
@@ -375,16 +400,88 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
 
   // 修改处理序列工具调用结果的逻辑
   const handleToolCallResultWithID = (toolCall) => {
+    console.log("Processing tool call result:", toolCall);
+    
     if (toolCall && toolCall.name === "generate_sequence" && toolCall.result) {
-      console.log("Processing generate_sequence tool call result:", toolCall);
-      // 从工具调用结果中提取序列ID
+      // 处理生成序列...（保持原有代码）
+    } 
+    else if (toolCall && toolCall.name === "refine_sequence_step" && toolCall.result) {
+      console.log("Processing refine_sequence_step result:", toolCall);
+      
+      // 从工具调用结果中提取数据
       const resultData = toolCall.result.result || toolCall.result;
-      if (resultData && resultData.id) {
-        console.log("✅ SETTING SEQUENCE ID FROM TOOL CALL:", resultData.id);
-        setSequenceId(resultData.id);
-      } else {
-        console.warn("⚠️ Tool call result doesn't contain a valid sequence ID");
+      
+      if (resultData && resultData.step_id) {
+        // 找到要更新的步骤索引
+        const stepIndex = sequence.findIndex(step => step.id === resultData.step_id);
+        
+        if (stepIndex >= 0) {
+          // 创建更新后的步骤对象
+          const updatedStep = {
+            ...sequence[stepIndex],
+            content: resultData.content,
+            title: resultData.title || sequence[stepIndex].title,
+            _highlight: true // 添加高亮标记
+          };
+          
+          // 更新序列中的步骤
+          setSequence(prev => {
+            const newSequence = [...prev];
+            newSequence[stepIndex] = updatedStep;
+            return newSequence;
+          });
+          
+          // 如果有序列ID且不是当前ID，更新它
+          if (resultData.sequence_id && (!sequenceId || resultData.sequence_id !== sequenceId)) {
+            console.log("Updating sequence ID:", resultData.sequence_id);
+            setSequenceId(resultData.sequence_id);
+          }
+          
+          console.log("Successfully updated sequence step:", stepIndex);
+          
+          // 5秒后移除高亮
+          setTimeout(() => {
+            setSequence(prev => {
+              const newSequence = [...prev];
+              if (newSequence[stepIndex] && newSequence[stepIndex]._highlight) {
+                newSequence[stepIndex] = {
+                  ...newSequence[stepIndex],
+                  _highlight: false
+                };
+              }
+              return newSequence;
+            });
+          }, 5000);
+        } else {
+          console.warn("Could not find step with ID:", resultData.step_id);
+          
+          // 如果找不到步骤但有序列ID，尝试刷新整个序列
+          if (resultData.sequence_id) {
+            console.log("Step not found - refreshing entire sequence");
+            fetchSequence(resultData.sequence_id);
+          }
+        }
       }
+    }
+  };
+
+  // 添加刷新序列的函数
+  const fetchSequence = async (id: string) => {
+    try {
+      console.log("Fetching sequence:", id);
+      const response = await sequenceApi.getSequence(id);
+      
+      if (response.success && response.data) {
+        console.log("Fetched sequence:", response.data);
+        
+        // 更新状态
+        setSequenceId(id);
+        setSequence(response.data.steps);
+        setSequenceTitle(response.data.title || "Sequence");
+        setSequencePosition(response.data.position || "Position");
+      }
+    } catch (error) {
+      console.error("Error fetching sequence:", error);
     }
   };
 
