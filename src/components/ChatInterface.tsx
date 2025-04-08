@@ -67,29 +67,6 @@ const ChatInterface = ({
     }
   }, [messages]);
 
-  const sendMessageWithTimeout = async () => {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Request timeout")), 15000)
-    );
-
-    try {
-      const result = await Promise.race([
-        chatApi.sendMessage({
-          /*...*/
-        }),
-        timeoutPromise,
-      ]);
-      return result;
-    } catch (e) {
-      console.error("Request failed or timed out:", e);
-      setIsLoading(false);
-      addMessage({
-        role: "system",
-        content: "The request is taking too long. Please try again.",
-      });
-    }
-  };
-
   const handleQuickAction = (prompt: string) => {
     // Set the prompt in the input
     setInputValue(prompt);

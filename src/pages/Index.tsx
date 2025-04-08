@@ -1,13 +1,16 @@
 import { useRef, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import ChatInterface from "@/components/ChatInterface";
 import Workspace from "@/components/Workspace";
 import Header from "@/components/Header";
 import { useChat } from "@/hooks/useChat";
 import { useSequence } from "@/hooks/useSequence";
+import { useUserSequences } from "@/hooks/useUserSequences";
 
 const Index = () => {
   const userId = "demo-user-123";
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { id: routeSequenceId } = useParams<{ id: string }>();
 
   const sequenceHook = useSequence({ userId });
   const {
@@ -32,14 +35,64 @@ const Index = () => {
       generateSequenceFromMessage(content, addMessage),
   });
 
-  const { messages, isLoading, handleUserMessage, addMessage } = chatHook;
+  const { messages, isLoading, handleUserMessage, addMessage, clearMessages } =
+    chatHook;
 
-  // 增加调试日志的包装函数
-  const handleMessageWithLog = (content: string) => {
-    console.log("User sending message with current sequenceId:", sequenceId);
-    return handleUserMessage(content);
+  const userSequencesHook = useUserSequences({ userId });
+  const {
+    userSequences,
+    isLoading: isLoadingSequences,
+    selectSequence,
+    deleteSequence,
+  } = userSequencesHook;
+
+  // Improved function to handle sequence selection
+  const handleSelectSequence = async (selectedId: string) => {
+    console.log("Selecting sequence:", selectedId);
+
+    // Fetch sequence data using selectSequence from userSequencesHook
+    const selectedSequence = await selectSequence(selectedId);
+
+    if (selectedSequence) {
+      // Clear existing messages to reset the chat context
+      if (clearMessages) {
+        clearMessages();
+      }
+
+      // Add a system message indicating context change
+      addMessage({
+        role: "system",
+        content: `Switched to sequence: "${selectedSequence.title}" for ${selectedSequence.position}`,
+      });
+    }
   };
 
+  // Handle sequence deletion
+  const handleDeleteSequence = async (deleteId: string) => {
+    console.log("Deleting sequence:", deleteId);
+
+    // If current sequence is being deleted, clear it
+    if (deleteId === sequenceId) {
+      // Add a system message indicating deletion
+      addMessage({
+        role: "system",
+        content: "The current sequence has been deleted.",
+      });
+    }
+
+    // Delete the sequence
+    await deleteSequence(deleteId);
+  };
+
+  // Load sequence from URL param on mount
+  useEffect(() => {
+    if (routeSequenceId) {
+      console.log("Loading sequence from URL parameter:", routeSequenceId);
+      handleSelectSequence(routeSequenceId);
+    }
+  }, [routeSequenceId]);
+
+  // Auto-scroll chat on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -51,7 +104,7 @@ const Index = () => {
         <div className="flex-1 flex flex-col border-r border-gray-200 bg-white max-w-md">
           <ChatInterface
             messages={messages}
-            onSendMessage={handleMessageWithLog}
+            onSendMessage={handleUserMessage}
             isLoading={isLoading}
             messagesEndRef={messagesEndRef}
           />
@@ -67,7 +120,13 @@ const Index = () => {
             onRemoveStep={removeSequenceStep}
             onSaveSequence={saveSequence}
             onTitleChange={setSequenceTitle}
-          />
+            userSequences={userSequences || []} // 来自 useUserSequences
+            onSelectSequence={handleSelectSequence}
+            currentSequenceId={sequenceId}
+            userId={userId}
+            isLoadingSequences={isLoadingSequences} // 来自 useUserSequences
+            onDeleteSequence={handleDeleteSequence}
+          />{" "}
         </div>
       </div>
     </div>

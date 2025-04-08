@@ -61,6 +61,16 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
     setMessages((prev) => [...prev, { ...newMessage, id }]);
   };
   
+  const clearMessages = () => {
+    setMessages([
+      {
+        id: "welcome",
+        role: "assistant",
+        content: "Hi, I'm Helix, your recruiting assistant. How can I help you today?",
+      },
+    ]);
+  };
+  
   useEffect(() => {
     const loadInitialHistory = async () => {
       if (!userId) {
@@ -617,6 +627,7 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
     isLoading,
     handleUserMessage,
     addMessage,
+    clearMessages,
     activeTool
   };
 };

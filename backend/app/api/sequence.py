@@ -209,4 +209,32 @@ def refine_step():
         
     except Exception as e:
         current_app.logger.error(f"Error refining step: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/<sequence_id>', methods=['DELETE'])
+def delete_sequence(sequence_id):
+    """
+    Delete a sequence by ID.
+    """
+    try:
+        # Get SequenceService instance and delete sequence
+        sequence_service = SequenceService.get_instance()
+        
+        # Handle async function with asyncio.run()
+        import asyncio
+        success = asyncio.run(sequence_service.delete_sequence(sequence_id))
+        
+        if not success:
+            return jsonify({'success': False, 'error': 'Sequence not found or could not be deleted'}), 404
+        
+        # Emit event that sequence has been deleted
+        socketio.emit('sequence_deleted', {'id': sequence_id})
+        
+        return jsonify({
+            'success': True,
+            'message': f'Sequence {sequence_id} deleted successfully'
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error deleting sequence: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500 

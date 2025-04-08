@@ -13,9 +13,6 @@ const Header = () => {
           <p className="text-sm text-gray-500">Recruitment Assistant</p>
         </div>
       </div>
-      <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-        3 Active Tasks
-      </div>
     </header>
   );
 };

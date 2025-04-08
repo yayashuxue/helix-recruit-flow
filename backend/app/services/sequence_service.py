@@ -124,6 +124,27 @@ class SequenceService:
         sequences = Sequence.query.filter_by(user_id=user_id).all()
         return [seq.to_dict() for seq in sequences]
     
+    async def delete_sequence(self, sequence_id: str) -> bool:
+        """Delete a sequence and all its steps."""
+        sequence = Sequence.query.get(sequence_id)
+        if not sequence:
+            return False
+        
+        try:
+            # First delete all related steps
+            SequenceStep.query.filter_by(sequence_id=sequence_id).delete()
+            
+            # Then delete the sequence itself
+            db.session.delete(sequence)
+            db.session.commit()
+            
+            current_app.logger.info(f"Sequence {sequence_id} deleted successfully")
+            return True
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error deleting sequence {sequence_id}: {str(e)}")
+            return False
+    
     async def refine_step(self, sequence_id: str, step_id: str, feedback: str) -> Optional[Dict[str, Any]]:
         """Refine a specific step based on user feedback."""
         step = SequenceStep.query.filter_by(id=step_id, sequence_id=sequence_id).first()

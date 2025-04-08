@@ -137,4 +137,26 @@ export const sequenceApi = {
       };
     }
   },
+  
+  delete: async (sequenceId: string): Promise<ApiResponse<void>> => {
+    console.log("Deleting sequence with ID:", sequenceId);
+    
+    try {
+      const result = await fetchAPI<void>(`/sequences/${sequenceId}`, 'DELETE');
+      
+      if (result.success) {
+        console.log("Successfully deleted sequence");
+      } else {
+        console.error("Failed to delete sequence:", result.error);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("Error deleting sequence:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error deleting sequence'
+      };
+    }
+  },
 };
