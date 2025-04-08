@@ -469,7 +469,7 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
   const fetchSequence = async (id: string) => {
     try {
       console.log("Fetching sequence:", id);
-      const response = await sequenceApi.getSequence(id);
+      const response = await sequenceApi.get(id);
       
       if (response.success && response.data) {
         console.log("Fetched sequence:", response.data);

@@ -145,7 +145,14 @@ const Workspace = ({
             ) : sequence.length > 0 ? (
               <div className="space-y-4">
                 {sequence.map((step, index) => (
-                  <Card key={step.id} className="border border-gray-200">
+                  <Card
+                    key={step.id}
+                    className={`border transition-all duration-300 ${
+                      step._highlight
+                        ? "border-green-500 bg-green-50 shadow-md ring-2 ring-green-300"
+                        : "border-gray-200"
+                    }`}
+                  >
                     <CardHeader className="py-2 px-4 flex flex-row items-center justify-between">
                       {editingTitles[step.id] ? (
                         <Input
@@ -155,11 +162,17 @@ const Workspace = ({
                           }
                           onBlur={() => handleTitleEdit(step.id, false)}
                           autoFocus
-                          className="h-8 text-sm font-medium"
+                          className={`h-8 text-sm font-medium ${
+                            step._highlight
+                              ? "border-green-300 focus:border-green-500"
+                              : ""
+                          }`}
                         />
                       ) : (
                         <CardTitle
-                          className="text-sm font-medium cursor-pointer hover:text-purple-600"
+                          className={`text-sm font-medium cursor-pointer hover:text-purple-600 ${
+                            step._highlight ? "text-green-700" : ""
+                          }`}
                           onClick={() => handleTitleEdit(step.id, true)}
                         >
                           {step.title}
@@ -180,7 +193,11 @@ const Workspace = ({
                         onChange={(e) =>
                           handleContentChange(index, e.target.value)
                         }
-                        className="min-h-[100px] text-sm resize-none focus:border-purple-300"
+                        className={`min-h-[100px] text-sm resize-none ${
+                          step._highlight
+                            ? "border-green-300 focus:border-green-500 bg-green-50"
+                            : "focus:border-purple-300"
+                        }`}
                       />
                     </CardContent>
                   </Card>

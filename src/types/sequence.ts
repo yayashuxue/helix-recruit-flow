@@ -1,8 +1,8 @@
-
 export interface SequenceStep {
   id: string;
   title: string;
   content: string;
+  _highlight?: boolean;
 }
 
 export interface Sequence {

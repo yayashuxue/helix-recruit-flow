@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Message } from "@/types/chat";
 import { generateCompletion } from "@/services/aiService";
-import { chatApi } from "@/api/client";
+import { chatApi, sequenceApi } from "@/api/client";
 import { FEATURES, API_CONFIG } from "@/config/appConfig";
 import io, { Socket } from 'socket.io-client';
 
@@ -364,7 +364,7 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
   };
 
   // Handle specific tool calls in the response
-  const processToolCalls = (toolCalls) => {
+  const processToolCalls = async (toolCalls) => {
     console.log("Processing tool calls:", toolCalls);
     
     for (const toolCall of toolCalls) {
@@ -411,7 +411,7 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
           } else if (toolCall.name === "refine_sequence_step") {
             // 处理序列修改工具
             const resultData = toolCall.result.result || toolCall.result;
-            console.log("Sequence refinement result:", resultData);
+            console.log("🔄 Sequence refinement result:", resultData);
             
             if (resultData) {
               // 添加工具执行成功消息
@@ -420,11 +420,58 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
                 content: "✅ Sequence updated successfully!"
               });
               
-              // 传递给序列处理函数
-              onSequenceRequest(JSON.stringify({
-                ...resultData,
-                _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
-              }));
+              // 如果当前有序列ID，获取完整的序列数据
+              if (sequenceId) {
+                console.log("⚠️ Current sequence ID:", sequenceId);
+                // 请求完整序列数据
+                try {
+                  // 使用正确的API方法名
+                  sequenceApi.get(sequenceId)
+                    .then(fullSequence => {
+                      if (fullSequence.success && fullSequence.data) {
+                        // 标记修改的步骤以供高亮
+                        const steps = fullSequence.data.steps.map(step => 
+                          step.id === resultData.step_id 
+                            ? { ...step, _highlight: true } 
+                            : step
+                        );
+                        
+                        // 传递完整序列数据
+                        onSequenceRequest(JSON.stringify({
+                          ...fullSequence.data,
+                          steps,
+                          _toolCall: { name: toolCall.name, arguments: toolCall.arguments }
+                        }));
+                      }
+                    })
+                    .catch(error => {
+                      console.error("Error fetching full sequence:", error);
+                      
+                      // 在API调用失败时，至少传递我们有的部分数据
+                      onSequenceRequest(JSON.stringify({
+                        ...resultData,
+                        _toolCall: { name: toolCall.name, arguments: toolCall.arguments },
+                        _highlight: true // 添加高亮标记
+                      }));
+                    });
+                } catch (error) {
+                  console.error("Error setting up sequence fetch:", error);
+                  
+                  // 即使在出错时也发送数据
+                  onSequenceRequest(JSON.stringify({
+                    ...resultData,
+                    _toolCall: { name: toolCall.name, arguments: toolCall.arguments },
+                    _highlight: true
+                  }));
+                }
+              } else {
+                // 如果没有sequenceId，直接传递我们有的数据
+                onSequenceRequest(JSON.stringify({
+                  ...resultData,
+                  _toolCall: { name: toolCall.name, arguments: toolCall.arguments },
+                  _highlight: true
+                }));
+              }
             }
           }
         }
