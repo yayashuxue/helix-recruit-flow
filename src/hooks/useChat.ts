@@ -217,12 +217,9 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
                       // This ensures the sequence steps are passed to the useSequence hook
                       onSequenceRequest(JSON.stringify(resultData));
                       
-                      // Add a message confirming the sequence was created
-                      const stepsCount = (resultData.steps && resultData.steps.length) || 0;
-                      addMessage({
-                        role: "system",
-                        content: `✅ ${stepsCount}-step sequence for ${resultData.position} created!`,
-                      });
+                      // 我们不需要额外的系统消息，因为generateSequenceFromMessage已经添加了一条助手消息
+                      // 只记录日志
+                      console.log(`Generated ${resultData.steps?.length || 0}-step sequence for ${resultData.position}`);
                     } else if (toolCall.result.error) {
                       addMessage({
                         role: "system",
@@ -366,34 +363,38 @@ export const useChat = ({ userId, sequenceId, onSequenceRequest }: UseChatProps)
       try {
         console.log("Received sequence update from socket:", data);
         
-        // Skip if this is just a response to our own save operation
+        // 简化标志检查 - 只有当这是我们自己的保存操作时忽略更新
         if (isLocalUpdateRef.current) {
           console.log("Ignoring socket update as it's from our own save operation");
           isLocalUpdateRef.current = false;
           return;
         }
         
-        // Important fix: correctly extract sequence data
-        // data might be {result: {...}} or directly the sequence object
+        // 提取序列数据
         const sequenceData = data.result || data;
         
-        console.log("Extracted sequence data:", sequenceData);
-        
-        // Check if sequence ID exists
+        // 直接处理序列ID并更新状态
         if (sequenceData && sequenceData.id) {
           console.log("Found sequence ID in socket event:", sequenceData.id);
+          
+          // 只有当序列有步骤时才更新 - 同步序列数据
+          if (sequenceData.steps && Array.isArray(sequenceData.steps)) {
+            // 更新序列数据，但不添加额外消息
+            console.log("Silently updating sequence data in workspace");
+            
+            // 传递给序列处理函数，但添加标记防止显示额外消息
+            const dataWithFlag = {
+              ...sequenceData,
+              _silentUpdate: true
+            };
+            
+            onSequenceRequest(JSON.stringify(dataWithFlag));
+          }
         } else {
           console.warn("No sequence ID found in socket data");
         }
-        
-        // Ensure we pass complete data to sequence processing function
-        if (sequenceData && sequenceData.steps) {
-          console.log("Passing complete sequence data to useSequence");
-          onSequenceRequest(JSON.stringify(sequenceData));
-        }
       } catch (error) {
         console.error("Error handling sequence update:", error);
-        // Don't throw the error - this prevents page refresh
       }
     });
 

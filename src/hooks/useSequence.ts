@@ -18,8 +18,47 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
   const [sequencePosition, setSequencePosition] = useState<string>("Position");
 
   const generateSequenceFromMessage = async (userMessage: string, addMessage: (message: Omit<import("@/types/chat").Message, "id">) => void) => {
+    // 判断是否已经有序列以及消息的类型
+    const hasExistingSequence = sequence.length > 0;
+    
+    // 非序列数据JSON，是正常用户消息
+    if (!userMessage.includes('"steps"')) {
+      // 检查是否已有序列，且消息是关于修改序列的
+      if (hasExistingSequence) {
+        console.log("Working with existing sequence, analyzing user message");
+        
+        const lowerMessage = userMessage.toLowerCase();
+        
+        // 处理常见的修改请求
+        if (lowerMessage.includes("email") || 
+            lowerMessage.includes("contact") || 
+            lowerMessage.includes("add") ||
+            lowerMessage.includes("update") ||
+            lowerMessage.includes("change") ||
+            lowerMessage.includes("edit")) {
+          
+          // 根据消息内容提供针对性回复
+          if (lowerMessage.includes("email") || lowerMessage.includes("contact")) {
+            addMessage({
+              role: "assistant",
+              content: "You can edit the sequence directly in the workspace. Feel free to add your contact information or any other specific details you'd like to include.",
+            });
+          } else {
+            addMessage({
+              role: "assistant",
+              content: "I'm here to help with your sequence. You can edit it directly in the workspace, or let me know what specific changes you'd like to make.",
+            });
+          }
+          
+          return;
+        }
+      }
+      
+      // 继续正常流程...
+    }
+    
     try {
-      // Parse JSON data if available
+      // 尝试解析JSON数据
       console.log("Parsing message data:", userMessage.substring(0, 100) + "...");
       const parsedData = JSON.parse(userMessage);
       
@@ -46,10 +85,16 @@ export const useSequence = ({ userId }: UseSequenceProps) => {
             setSequencePosition(parsedData.position);
           }
           
-          addMessage({
-            role: "assistant",
-            content: `I've created a draft recruiting sequence for ${parsedData.position}. You can edit any step directly in the workspace, or let me know what changes you'd like to make.`,
-          });
+          // 检查是否为静默更新(来自Socket)
+          if (parsedData._silentUpdate) {
+            console.log("Silent update detected, not adding assistant message");
+          } else {
+            // 只有在非静默更新时才添加消息
+            addMessage({
+              role: "assistant",
+              content: `I've created a draft recruiting sequence for ${parsedData.position}. You can edit any step directly in the workspace, or let me know what changes you'd like to make.`,
+            });
+          }
         } catch (error) {
           console.error("Error setting pre-generated sequence:", error);
           addMessage({
